@@ -14,6 +14,63 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<script>
+(function(){
+  "use strict";
+
+  var STUDENT_ACCESS_STORAGE_KEY = 'bestFitLine.studentAccessId';
+
+  function getStoredStudentAccessId(){
+    try {
+      return window.sessionStorage.getItem(STUDENT_ACCESS_STORAGE_KEY);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function setStoredStudentAccessId(id){
+    try {
+      window.sessionStorage.setItem(STUDENT_ACCESS_STORAGE_KEY, id);
+    } catch (err) {}
+  }
+
+  function clearStoredStudentAccessId(){
+    try {
+      window.sessionStorage.removeItem(STUDENT_ACCESS_STORAGE_KEY);
+    } catch (err) {}
+  }
+
+  function getStudentAccessId(){
+    var searchParams = new URLSearchParams(window.location.search);
+
+    if (searchParams.has('id')) {
+      return (searchParams.get('id') || '').trim() || null;
+    }
+
+    return (getStoredStudentAccessId() || '').trim() || null;
+  }
+
+  function cleanStudentAccessIdFromUrl(){
+    var url = new URL(window.location.href);
+    if (!url.searchParams.has('id')) return;
+
+    url.searchParams.delete('id');
+    window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+  }
+
+  var studentAccessId = getStudentAccessId();
+  window.__studentAccessId = studentAccessId;
+
+  if (studentAccessId) {
+    setStoredStudentAccessId(studentAccessId);
+    cleanStudentAccessIdFromUrl();
+    document.documentElement.classList.add('access-granted');
+  } else {
+    clearStoredStudentAccessId();
+    document.documentElement.classList.add('access-required');
+  }
+})();
+</script>
 <title>Best-Fit Line Simulator — H2 Chemistry</title>
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -30,6 +87,27 @@ body {
   font-family:'Lexend',sans-serif; font-size:1rem;
   background:var(--bg); color:var(--text);
   min-height:100vh; display:flex; flex-direction:column; overflow-x:hidden;
+}
+
+#student-shell { min-height:100vh; display:flex; flex-direction:column; }
+.access-required #student-shell { display:none; }
+.access-granted #access-required-screen { display:none; }
+#access-required-screen {
+  min-height:100vh; width:100%;
+  display:flex; align-items:center; justify-content:center;
+  padding:24px; background:var(--bg); color:var(--text);
+}
+.access-required-card {
+  width:100%; max-width:420px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:13px; padding:28px;
+  box-shadow:0 24px 64px rgba(0,0,0,.45);
+}
+.access-required-card h1 {
+  font-size:1.35rem; line-height:1.25; margin-bottom:10px;
+}
+.access-required-card p {
+  color:var(--muted); font-size:.95rem; line-height:1.6;
 }
 
 /* ── MODAL ── */
@@ -315,6 +393,15 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
 </head>
 <body>
 
+<main id="access-required-screen">
+  <section class="access-required-card" aria-labelledby="access-required-title">
+    <h1 id="access-required-title">Access Required</h1>
+    <p>Please open this activity from IVY.</p>
+  </section>
+</main>
+
+<div id="student-shell">
+
 <!-- MODAL -->
 <div id="modal-overlay">
   <div id="modal-box">
@@ -558,6 +645,8 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
       <button class="btn btn-blue" onclick="generateData()" style="margin-top:14px">⟳&nbsp; New Dataset</button>
     </div>
   </div>
+
+</div>
 
 </div>
 
@@ -1729,7 +1818,9 @@ function showFeedback(){
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-drawGraph();
+if (window.__studentAccessId) {
+  drawGraph();
+}
 </script>
 </body>
 </html>
