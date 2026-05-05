@@ -31,47 +31,6 @@ body {
   background:var(--bg); color:var(--text);
   min-height:100vh; display:flex; flex-direction:column; overflow-x:hidden;
 }
-[hidden] { display:none !important; }
-#student-app-shell {
-  min-height:100vh;
-  display:flex;
-  flex-direction:column;
-}
-.access-required {
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:24px;
-  background:var(--bg);
-  color:var(--text);
-}
-.access-required-card {
-  width:100%;
-  max-width:460px;
-  padding:28px;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:13px;
-  box-shadow:0 24px 64px rgba(0,0,0,.4);
-}
-.access-required-kicker {
-  font-size:.72rem;
-  font-weight:700;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--blue);
-  margin-bottom:10px;
-}
-.access-required h1 {
-  font-size:1.6rem;
-  line-height:1.2;
-  margin-bottom:12px;
-}
-.access-required p {
-  color:var(--muted);
-  line-height:1.65;
-}
 
 /* ── MODAL ── */
 #modal-overlay {
@@ -356,15 +315,6 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
 </head>
 <body>
 
-<div id="access-required-screen" class="access-required" hidden>
-  <div class="access-required-card">
-    <h1>No Access</h1>
-    <p>Open this activity from IVY to continue.</p>
-  </div>
-</div>
-
-<div id="student-app-shell" hidden>
-
 <!-- MODAL -->
 <div id="modal-overlay">
   <div id="modal-box">
@@ -611,62 +561,8 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
 
 </div>
 
-</div>
-
 <script>
 "use strict";
-
-const STUDENT_ACCESS_STORAGE_KEY = 'bestFitLine.studentAccessId';
-
-function readStoredStudentAccessId(){
-  try {
-    return window.sessionStorage.getItem(STUDENT_ACCESS_STORAGE_KEY)?.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function getStudentAccessId(){
-  const params = new URLSearchParams(window.location.search);
-  if (params.has('id')) {
-    return params.get('id')?.trim() || null;
-  }
-
-  return readStoredStudentAccessId();
-}
-
-function rememberStudentAccessId(studentAccessId){
-  try {
-    window.sessionStorage.setItem(STUDENT_ACCESS_STORAGE_KEY, studentAccessId);
-  } catch {
-    // Same-tab continuity is best effort only.
-  }
-}
-
-function forgetStudentAccessId(){
-  try {
-    window.sessionStorage.removeItem(STUDENT_ACCESS_STORAGE_KEY);
-  } catch {
-    // Storage may be unavailable in some browser modes.
-  }
-}
-
-function cleanStudentAccessIdFromUrl(){
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has('id')) return;
-
-  url.searchParams.delete('id');
-  window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-}
-
-const studentAccessId = getStudentAccessId();
-if (!studentAccessId) {
-  forgetStudentAccessId();
-  document.getElementById('access-required-screen').hidden = false;
-} else {
-  rememberStudentAccessId(studentAccessId);
-  cleanStudentAccessIdFromUrl();
-  document.getElementById('student-app-shell').hidden = false;
 
 // ════════════════════════════════════════════
 // CANVAS SETUP  — no labels → tighter margins
@@ -879,19 +775,30 @@ seedPRNG(Math.floor(Math.random()*1e9));
 function generateData(){
   // ── Resolve & apply seed ───────────────────────────────────────────────
   const rawInput = document.getElementById('seed-input').value.trim();
+  const seedProvided = rawInput !== '' && !isNaN(parseInt(rawInput, 10));
   let seed = parseInt(rawInput, 10);
-  if(isNaN(seed) || rawInput===''){
-    // Generate a random 6-digit seed when field is empty
+  if(!seedProvided){
+    // No seed entered — generate a fresh random one
     seed = 100000 + Math.floor(Math.random()*900000);
   }
-  seed = Math.abs(seed) % 1000000;              // clamp to 6 digits
-  // Show the active dataset number in the header; clear the load input
+  seed = Math.abs(seed) % 1000000;
+
   const seedStr = String(seed).padStart(6,'0');
   document.getElementById('seed-input').value = '';
   document.getElementById('seed-display').innerHTML = seedStr;
   seedPRNG(seed);
 
-  // All randomness below uses _prng() (via rnd / rndI) for reproducibility
+  // When a specific seed is provided, anomaly and scatter are FULLY determined
+  // by the seed so the dataset is identical on every device regardless of UI settings.
+  // The UI toggles switch to Random to make this clear.
+  if(seedProvided){
+    S.anomSetting = 'random';
+    S.difficulty  = 'random';
+    setAnom('random');
+    setDifficulty('random');
+  }
+
+  // All randomness below uses _prng() for reproducibility
   S.hasAnom = S.anomSetting==='random' ? _prng()<.5 : S.anomSetting==='on';
 
   // Pick a random scenario
@@ -903,7 +810,7 @@ function generateData(){
   const xSpan=sc.xMax-sc.xMin, ySpan=sc.yMax-sc.yMin;
   const xA=sc.xMin+xSpan*.07, xB=sc.xMax-xSpan*.04;
 
-  // Apply difficulty scaling — resolve 'random' to easy or medium
+  // Scatter level always resolved by PRNG when using a seed (or when difficulty=random)
   const resolvedDiff = S.difficulty==='random'
     ? (_prng()<.5 ? DIFF.easy : DIFF.medium)
     : DIFF[S.difficulty];
@@ -1822,20 +1729,7 @@ function showFeedback(){
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-Object.assign(window, {
-  closeModal,
-  openModal,
-  loadDataset,
-  generateData,
-  setInputMode,
-  setAnom,
-  setDifficulty,
-  toggleMarkMode,
-  resetDrawing,
-  submitAnswer
-});
 drawGraph();
-}
 </script>
 </body>
 </html>
