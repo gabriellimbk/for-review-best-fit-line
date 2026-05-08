@@ -14,63 +14,6 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<script>
-(function(){
-  "use strict";
-
-  var STUDENT_ACCESS_STORAGE_KEY = 'bestFitLine.studentAccessId';
-
-  function getStoredStudentAccessId(){
-    try {
-      return window.sessionStorage.getItem(STUDENT_ACCESS_STORAGE_KEY);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function setStoredStudentAccessId(id){
-    try {
-      window.sessionStorage.setItem(STUDENT_ACCESS_STORAGE_KEY, id);
-    } catch (err) {}
-  }
-
-  function clearStoredStudentAccessId(){
-    try {
-      window.sessionStorage.removeItem(STUDENT_ACCESS_STORAGE_KEY);
-    } catch (err) {}
-  }
-
-  function getStudentAccessId(){
-    var searchParams = new URLSearchParams(window.location.search);
-
-    if (searchParams.has('id')) {
-      return (searchParams.get('id') || '').trim() || null;
-    }
-
-    return (getStoredStudentAccessId() || '').trim() || null;
-  }
-
-  function cleanStudentAccessIdFromUrl(){
-    var url = new URL(window.location.href);
-    if (!url.searchParams.has('id')) return;
-
-    url.searchParams.delete('id');
-    window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-  }
-
-  var studentAccessId = getStudentAccessId();
-  window.__studentAccessId = studentAccessId;
-
-  if (studentAccessId) {
-    setStoredStudentAccessId(studentAccessId);
-    cleanStudentAccessIdFromUrl();
-    document.documentElement.classList.add('access-granted');
-  } else {
-    clearStoredStudentAccessId();
-    document.documentElement.classList.add('access-required');
-  }
-})();
-</script>
 <title>Best-Fit Line Simulator — H2 Chemistry</title>
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -87,27 +30,6 @@ body {
   font-family:'Lexend',sans-serif; font-size:1rem;
   background:var(--bg); color:var(--text);
   min-height:100vh; display:flex; flex-direction:column; overflow-x:hidden;
-}
-
-#student-shell { min-height:100vh; display:flex; flex-direction:column; }
-.access-required #student-shell { display:none; }
-.access-granted #access-required-screen { display:none; }
-#access-required-screen {
-  min-height:100vh; width:100%;
-  display:flex; align-items:center; justify-content:center;
-  padding:24px; background:var(--bg); color:var(--text);
-}
-.access-required-card {
-  width:100%; max-width:420px;
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:13px; padding:28px;
-  box-shadow:0 24px 64px rgba(0,0,0,.45);
-}
-.access-required-card h1 {
-  font-size:1.35rem; line-height:1.25; margin-bottom:10px;
-}
-.access-required-card p {
-  color:var(--muted); font-size:.95rem; line-height:1.6;
 }
 
 /* ── MODAL ── */
@@ -393,15 +315,6 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
 </head>
 <body>
 
-<main id="access-required-screen">
-  <section class="access-required-card" aria-labelledby="access-required-title">
-    <h1 id="access-required-title">Access Required</h1>
-    <p>Please open this activity from IVY.</p>
-  </section>
-</main>
-
-<div id="student-shell">
-
 <!-- MODAL -->
 <div id="modal-overlay">
   <div id="modal-box">
@@ -648,8 +561,6 @@ header h1 { font-size:1.05rem; font-weight:700; letter-spacing:-.02em; }
 
 </div>
 
-</div>
-
 <script>
 "use strict";
 
@@ -844,11 +755,11 @@ document.getElementById('modal-overlay').addEventListener('click',e=>{
 // SEED HELPERS
 // ════════════════════════════════════════════
 
-/** Load a specific dataset by number — called by the Load button. */
+/** Load a specific dataset by number — called by the Load button or Enter key. */
 function loadDataset(){
-  const raw = document.getElementById('seed-input').value.trim();
-  if(!raw){ return; }            // empty → do nothing; use Generate for random
-  generateData();                // generateData reads from the input field
+  const raw = document.getElementById('seed-input').value.trim().replace(/\D/g,'');
+  if(!raw){ return; }   // nothing typed — do nothing
+  generateData();
 }
 
 // Also trigger loadDataset when Enter is pressed inside the seed input
@@ -862,62 +773,74 @@ seedPRNG(Math.floor(Math.random()*1e9));
 // DATA GENERATION
 // ════════════════════════════════════════════
 function generateData(){
-  // ── Resolve & apply seed ───────────────────────────────────────────────
-  const rawInput = document.getElementById('seed-input').value.trim();
-  const seedProvided = rawInput !== '' && !isNaN(parseInt(rawInput, 10));
-  let seed = parseInt(rawInput, 10);
-  if(!seedProvided){
-    // No seed entered — generate a fresh random one
-    seed = 100000 + Math.floor(Math.random()*900000);
-  }
-  seed = Math.abs(seed) % 1000000;
+  // Always generates a FRESH random dataset regardless of what is in the seed input.
+  // The seed input is left unchanged so the last loaded number stays visible.
+  const prngseed = Math.floor(Math.random() * 100000);
+  const hasAnom = S.anomSetting === 'on'  ? true
+                : S.anomSetting === 'off' ? false
+                : Math.random() < 0.5;
+  const resolvedDiff = S.difficulty === 'medium' ? DIFF.medium
+                     : S.difficulty === 'easy'   ? DIFF.easy
+                     : (Math.random() < 0.5 ? DIFF.easy : DIFF.medium);
+  _runGenerate(prngseed, hasAnom, resolvedDiff);
+}
 
-  const seedStr = String(seed).padStart(6,'0');
-  document.getElementById('seed-input').value = '';
+/** Load a specific dataset by number — called by the Load button or Enter key. */
+function loadDataset(){
+  const raw = document.getElementById('seed-input').value.trim().replace(/\D/g,'');
+  if(!raw){ return; }
+  const full    = Math.abs(parseInt(raw, 10)) % 1000000;
+  const encByte = Math.floor(full / 100000);   // 0–3
+  const prngseed = full % 100000;
+  const hasAnom  = (encByte >> 1) === 1;
+  const resolvedDiff = (encByte & 1) === 1 ? DIFF.medium : DIFF.easy;
+  // Reflect settings into UI so student sees what this dataset contains
+  setAnom(hasAnom ? 'on' : 'off');
+  setDifficulty((encByte & 1) === 1 ? 'medium' : 'easy');
+  _runGenerate(prngseed, hasAnom, resolvedDiff);
+}
+
+/** Shared generation core — called by both generateData() and loadDataset(). */
+function _runGenerate(prngseed, hasAnom, resolvedDiff){
+  S.hasAnom = hasAnom;
+
+  // Encode and display the dataset number
+  const anomBit    = hasAnom ? 1 : 0;
+  const scatterBit = (resolvedDiff === DIFF.medium) ? 1 : 0;
+  const encFinal   = (anomBit << 1) | scatterBit;
+  const displaySeed = encFinal * 100000 + prngseed;
+  const seedStr = String(displaySeed).padStart(6, '0');
+  document.getElementById('seed-input').value = seedStr;
   document.getElementById('seed-display').innerHTML = seedStr;
-  seedPRNG(seed);
 
-  // When a specific seed is provided, anomaly and scatter are FULLY determined
-  // by the seed so the dataset is identical on every device regardless of UI settings.
-  // The UI toggles switch to Random to make this clear.
-  if(seedProvided){
-    S.anomSetting = 'random';
-    S.difficulty  = 'random';
-    setAnom('random');
-    setDifficulty('random');
-  }
+  // Seed the PRNG — anomaly/scatter already resolved above
+  seedPRNG(prngseed);
 
-  // All randomness below uses _prng() for reproducibility
-  S.hasAnom = S.anomSetting==='random' ? _prng()<.5 : S.anomSetting==='on';
-
-  // Pick a random scenario
-  S.scenario = SCENARIOS[rndI(0, SCENARIOS.length-1)];
+  // ── SCENARIO & POINTS ─────────────────────────────────────────────────────
+  S.scenario = SCENARIOS[rndI(0, SCENARIOS.length - 1)];
   const sc = S.scenario;
   const {fn, noise, n} = sc.mkModel();
   S.trueModel = fn;
 
-  const xSpan=sc.xMax-sc.xMin, ySpan=sc.yMax-sc.yMin;
-  const xA=sc.xMin+xSpan*.07, xB=sc.xMax-xSpan*.04;
+  const xSpan = sc.xMax - sc.xMin, ySpan = sc.yMax - sc.yMin;
+  const xA = sc.xMin + xSpan * .07, xB = sc.xMax - xSpan * .04;
+  const effectiveNoise = noise * resolvedDiff.noiseMult;
 
-  // Scatter level always resolved by PRNG when using a seed (or when difficulty=random)
-  const resolvedDiff = S.difficulty==='random'
-    ? (_prng()<.5 ? DIFF.easy : DIFF.medium)
-    : DIFF[S.difficulty];
-  const scaledNoise = noise * resolvedDiff.noiseMult;
-
-  S.pts=[]; S.anomIdx=-1;
-  for(let i=0;i<n;i++){
-    const t=i/(n-1);
-    const x=clamp(xA+t*(xB-xA)+(_prng()-.5)*.05*xSpan, xA, xB);
-    const y=clamp(fn(x)+(_prng()-.5)*2*scaledNoise*1.3, sc.yMin+ySpan*.02, sc.yMax-ySpan*.02);
-    S.pts.push({x,y,isAnom:false});
+  S.pts = []; S.anomIdx = -1;
+  for(let i = 0; i < n; i++){
+    const t = i / (n - 1);
+    const x = clamp(xA + t*(xB-xA) + (_prng()-.5)*.05*xSpan, xA, xB);
+    const y = clamp(fn(x) + (_prng()-.5)*2*effectiveNoise*1.3,
+                    sc.yMin + ySpan*.02, sc.yMax - ySpan*.02);
+    S.pts.push({x, y, isAnom: false});
   }
   if(S.hasAnom){
-    const ai=rndI(1,n-2);
-    const ax=S.pts[ai].x, ey=fn(ax), dir=_prng()<.5?1:-1;
-    const anomDev = scaledNoise * rnd(resolvedDiff.anomRatio[0], resolvedDiff.anomRatio[1]);
-    const ay=clamp(ey+dir*anomDev, sc.yMin+ySpan*.04, sc.yMax-ySpan*.04);
-    S.pts[ai]={x:ax,y:ay,isAnom:true}; S.anomIdx=ai;
+    const ai = rndI(1, n - 2);
+    const ax = S.pts[ai].x, ey = fn(ax), dir = _prng() < .5 ? 1 : -1;
+    const anomDev = effectiveNoise * rnd(resolvedDiff.anomRatio[0], resolvedDiff.anomRatio[1]);
+    const ay = clamp(ey + dir*anomDev, sc.yMin + ySpan*.04, sc.yMax - ySpan*.04);
+    S.pts[ai] = {x: ax, y: ay, isAnom: true};
+    S.anomIdx = ai;
   }
 
   // Reset drawing state
@@ -1818,9 +1741,7 @@ function showFeedback(){
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-if (window.__studentAccessId) {
-  drawGraph();
-}
+drawGraph();
 </script>
 </body>
 </html>
